@@ -123,32 +123,25 @@ const getUser = async (req, res) => {
 const adminLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
+    const user = await User.findOne({ email, role: 'admin' });
 
-    // Check for admin email
-    const admin = await Admin.findOne({ email });
-    if (!admin) {
+    if (!user || !(await user.matchPassword(password))) {
       return res.status(401).json({ message: 'Invalid admin credentials' });
     }
 
-    // Check password
-    const isMatch = await admin.matchPassword(password);
-    if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid admin credentials' });
-    }
-
+    const token = generateToken(user._id, user.role);
     res.json({
-      message: 'Admin login successful',
       user: {
-        _id: admin._id,
-        name: admin.name,
-        email: admin.email,
-        role: 'admin',
-        isAdmin: true
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
       },
-      token: generateToken(admin._id)
+      token
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Admin login error:', error);
+    res.status(500).json({ message: 'Admin login failed' });
   }
 };
 

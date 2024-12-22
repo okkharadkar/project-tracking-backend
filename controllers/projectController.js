@@ -23,19 +23,37 @@ const getAllProjects = async (req, res) => {
 // @access  Private/Admin
 const createProject = async (req, res) => {
   try {
-    console.log('Creating project with data:', req.body);
-    console.log('User making request:', req.user);
-
-    const project = new Project({
-      ...req.body,
-      createdBy: req.user._id
+    console.log('Create project request:', {
+      body: req.body,
+      user: req.user,
+      headers: req.headers
     });
 
-    await project.save();
-    res.status(201).json(project);
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    const project = new Project({
+      title: req.body.title,
+      description: req.body.description,
+      createdBy: req.user._id,
+      status: 'pending'
+    });
+
+    const savedProject = await project.save();
+    console.log('Project created:', savedProject);
+
+    const populatedProject = await Project.findById(savedProject._id)
+      .populate('createdBy', 'name email')
+      .populate('assignedTo', 'name email');
+
+    res.status(201).json(populatedProject);
   } catch (error) {
     console.error('Create project error:', error);
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ 
+      message: 'Failed to create project',
+      error: error.message 
+    });
   }
 };
 
