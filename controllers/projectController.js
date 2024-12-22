@@ -23,37 +23,27 @@ const getAllProjects = async (req, res) => {
 // @access  Private/Admin
 const createProject = async (req, res) => {
   try {
-    console.log('Create project request:', {
-      body: req.body,
-      user: req.user,
-      headers: req.headers
-    });
+    const { title, description } = req.body;
 
-    if (!req.user || !req.user._id) {
-      return res.status(401).json({ message: 'User not authenticated' });
+    if (!title || !description) {
+      return res.status(400).json({ message: 'Please provide title and description' });
     }
 
     const project = new Project({
-      title: req.body.title,
-      description: req.body.description,
+      title,
+      description,
       createdBy: req.user._id,
       status: 'pending'
     });
 
     const savedProject = await project.save();
-    console.log('Project created:', savedProject);
-
     const populatedProject = await Project.findById(savedProject._id)
-      .populate('createdBy', 'name email')
-      .populate('assignedTo', 'name email');
+      .populate('createdBy', 'name email');
 
     res.status(201).json(populatedProject);
   } catch (error) {
     console.error('Create project error:', error);
-    res.status(500).json({ 
-      message: 'Failed to create project',
-      error: error.message 
-    });
+    res.status(500).json({ message: 'Failed to create project' });
   }
 };
 
@@ -158,31 +148,25 @@ const deleteProject = async (req, res) => {
 // @access  Private
 const getUserProjects = async (req, res) => {
   try {
-    const userId = req.user._id;
-    if (!userId) {
+    if (!req.user || !req.user._id) {
       return res.status(401).json({ message: 'User not authenticated' });
     }
 
     const projects = await Project.find({
       $or: [
-        { assignedTo: userId },
+        { assignedTo: req.user._id },
         { status: 'pending' }
       ]
     })
     .populate('createdBy', 'name email')
     .populate('assignedTo', 'name email')
-    .populate('acceptedBy', 'name email')
-    .populate('completedBy', 'name email')
     .sort('-createdAt');
 
     const stats = {
       total: projects.length,
       pending: projects.filter(p => p.status === 'pending').length,
-      assigned: projects.filter(p => p.status === 'assigned').length,
       inProgress: projects.filter(p => p.status === 'in-progress').length,
-      completed: projects.filter(p => p.status === 'completed').length,
-      averageProgress: projects.length ? 
-        Math.round(projects.reduce((acc, curr) => acc + (curr.progress || 0), 0) / projects.length) : 0
+      completed: projects.filter(p => p.status === 'completed').length
     };
 
     res.status(200).json({
@@ -191,7 +175,7 @@ const getUserProjects = async (req, res) => {
     });
   } catch (error) {
     console.error('Get user projects error:', error);
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: 'Failed to fetch projects' });
   }
 };
 

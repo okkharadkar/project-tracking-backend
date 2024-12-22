@@ -1,24 +1,32 @@
 const mongoose = require('mongoose');
-const Admin = require('../models/Admin');
+const User = require('../models/User');
 require('dotenv').config();
 
-async function createFirstAdmin() {
+const createAdmin = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI);
-
-    const adminUser = await Admin.create({
-      name: 'Super Admin',
-      email: 'admin@example.com',
-      password: 'admin123',
-      isAdmin: true
-    });
-
-    console.log('Admin user created:', adminUser);
-    process.exit(0);
+    
+    const adminUser = await User.findOne({ email: 'admin@example.com' });
+    
+    if (!adminUser) {
+      const admin = await User.create({
+        name: 'Admin',
+        email: 'admin@example.com',
+        password: 'admin123',
+        role: 'admin'
+      });
+      console.log('Admin user created:', admin);
+    } else {
+      adminUser.role = 'admin';
+      await adminUser.save();
+      console.log('Existing user updated to admin');
+    }
+    
+    process.exit();
   } catch (error) {
-    console.error('Error creating admin user:', error);
+    console.error('Error:', error);
     process.exit(1);
   }
-}
+};
 
-createFirstAdmin(); 
+createAdmin(); 

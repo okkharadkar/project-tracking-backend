@@ -4,10 +4,15 @@ const Candidate = require('../models/Candidate');
 const Admin = require('../models/Admin');
 
 // Generate JWT Token
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: '30d'
-  });
+const generateToken = (userId, role) => {
+  return jwt.sign(
+    { 
+      _id: userId,
+      role: role 
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: '30d' }
+  );
 };
 
 // @desc    Register new user
@@ -70,38 +75,33 @@ const signup = async (req, res) => {
 // @access  Public
 const login = async (req, res) => {
   try {
-    const { email, password, isAdmin } = req.body;
-
-    // Check for user email
-    const user = await User.findOne({ email }).populate('candidateId');
+    const { email, password } = req.body;
+    
+    const user = await User.findOne({ email });
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    // If attempting admin login, verify admin role
-    if (isAdmin && user.role !== 'admin') {
-      return res.status(403).json({ message: 'Not authorized as admin' });
-    }
-
-    // Check password
     const isMatch = await user.matchPassword(password);
     if (!isMatch) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
+    // Generate token with role
+    const token = generateToken(user._id, user.role);
+
     res.json({
-      message: 'Login successful',
       user: {
         _id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role,
-        candidateId: user.candidateId
+        role: user.role
       },
-      token: generateToken(user._id)
+      token
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Login error:', error);
+    res.status(500).json({ message: 'Login failed' });
   }
 };
 
@@ -123,19 +123,43 @@ const getUser = async (req, res) => {
 const adminLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email, role: 'admin' });
+    console.log('Admin login attempt:', { email });
 
-    if (!user || !(await user.matchPassword(password))) {
+    const user = await User.findOne({ email });
+    console.log('Found user:', user ? { id: user._id, role: user.role } : 'No user found');
+
+    if (!user) {
       return res.status(401).json({ message: 'Invalid admin credentials' });
     }
 
-    const token = generateToken(user._id, user.role);
+    const isMatch = await user.matchPassword(password);
+    console.log('Password match:', isMatch);
+
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Invalid admin credentials' });
+    }
+
+    if (user.role !== 'admin') {
+      console.log('User is not admin');
+      return res.status(401).json({ message: 'Not authorized as admin' });
+    }
+
+    const token = jwt.sign(
+      { 
+        _id: user._id,
+        role: 'admin'
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    console.log('Admin login successful');
     res.json({
       user: {
         _id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role
+        role: 'admin'
       },
       token
     });
