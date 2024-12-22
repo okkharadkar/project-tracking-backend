@@ -23,34 +23,19 @@ const getAllProjects = async (req, res) => {
 // @access  Private/Admin
 const createProject = async (req, res) => {
   try {
-    const { title, description } = req.body;
-    
-    if (!title || !description) {
-      return res.status(400).json({ 
-        message: 'Please provide both title and description' 
-      });
-    }
+    console.log('Creating project with data:', req.body);
+    console.log('User making request:', req.user);
 
-    // Create project with admin ID
-    const project = await Project.create({
-      title,
-      description,
-      status: 'pending',
+    const project = new Project({
+      ...req.body,
       createdBy: req.user._id
     });
 
-    // Populate the created project
-    const populatedProject = await Project.findById(project._id)
-      .populate('createdBy', 'name email')
-      .populate('assignedTo', 'name email');
-
-    res.status(201).json(populatedProject);
+    await project.save();
+    res.status(201).json(project);
   } catch (error) {
     console.error('Create project error:', error);
-    res.status(500).json({ 
-      message: 'Failed to create project',
-      error: error.message 
-    });
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -137,13 +122,15 @@ const getProjectSummary = async (req, res) => {
 const deleteProject = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
+    
     if (!project) {
       return res.status(404).json({ message: 'Project not found' });
     }
 
-    await project.deleteOne();
-    res.status(200).json({ message: 'Project removed' });
+    await Project.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Project deleted successfully' });
   } catch (error) {
+    console.error('Delete project error:', error);
     res.status(500).json({ message: error.message });
   }
 };
