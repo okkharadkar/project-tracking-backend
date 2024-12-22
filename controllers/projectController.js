@@ -136,14 +136,20 @@ const getProjectSummary = async (req, res) => {
 // @access  Private/Admin
 const deleteProject = async (req, res) => {
   try {
+    // Check if user is admin
+    if (!req.user.isAdmin) {
+      return res.status(403).json({ message: 'Not authorized as admin' });
+    }
+
     const project = await Project.findById(req.params.id);
     if (!project) {
       return res.status(404).json({ message: 'Project not found' });
     }
 
     await project.deleteOne();
-    res.status(200).json({ message: 'Project removed' });
+    res.status(200).json({ message: 'Project deleted successfully' });
   } catch (error) {
+    console.error('Delete project error:', error);
     res.status(500).json({ message: error.message });
   }
 };

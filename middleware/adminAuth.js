@@ -3,26 +3,21 @@ const Admin = require('../models/Admin');
 
 const adminAuth = async (req, res, next) => {
   try {
-    let token;
-
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-      token = req.headers.authorization.split(' ')[1];
-
-      // Verify token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-      // Find admin and attach to request
-      const admin = await Admin.findById(decoded.id).select('-password');
-      
-      if (!admin) {
-        return res.status(401).json({ message: 'Not authorized as admin' });
-      }
-
-      req.user = admin;
-      next();
-    } else {
-      res.status(401).json({ message: 'Not authorized, no token' });
+    if (!req.headers.authorization?.startsWith('Bearer')) {
+      return res.status(401).json({ message: 'No token provided' });
     }
+
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Check if user exists and is admin
+    const admin = await Admin.findById(decoded.id);
+    if (!admin || !admin.isAdmin) {
+      return res.status(403).json({ message: 'Not authorized as admin' });
+    }
+
+    req.user = admin;
+    next();
   } catch (error) {
     console.error('Admin auth error:', error);
     res.status(401).json({ message: 'Not authorized' });

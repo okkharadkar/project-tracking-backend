@@ -6,18 +6,22 @@ require('dotenv').config();
 
 const app = express();
 
-// Middleware
+// CORS configuration
 app.use(cors({
   origin: [
     'http://localhost:3000',
     'http://localhost:5173',
-    'https://project-tracking.vercel.app',
-    'https://project-tracking-git-main.vercel.app'
+    'https://project-tracking-51py.vercel.app'
   ],
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// Enable pre-flight requests
+app.options('*', cors());
+
+// Other middleware
 app.use(bodyParser.json());
 app.use(express.json());
 
