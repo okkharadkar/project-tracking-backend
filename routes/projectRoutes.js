@@ -12,7 +12,7 @@ const {
   completeProject
 } = require('../controllers/projectController');
 const { protect } = require('../middleware/auth');
-const { adminAuth } = require('../middleware/authMiddleware');
+const { adminAuth } = require('../middleware/adminAuth');
 
 // User projects route (must come before /:id routes)
 router.get('/user', protect, getUserProjects);
@@ -20,7 +20,6 @@ router.get('/summary', getProjectSummary);
 
 // Admin routes
 router.post('/', adminAuth, createProject);
-router.put('/:id', adminAuth, updateProject);
 router.delete('/:id', adminAuth, deleteProject);
 
 // Project action routes

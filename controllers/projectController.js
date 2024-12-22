@@ -24,26 +24,33 @@ const getAllProjects = async (req, res) => {
 const createProject = async (req, res) => {
   try {
     const { title, description } = req.body;
-
+    
     if (!title || !description) {
-      return res.status(400).json({ message: 'Please provide title and description' });
+      return res.status(400).json({ 
+        message: 'Please provide both title and description' 
+      });
     }
 
-    const project = new Project({
+    // Create project with admin ID
+    const project = await Project.create({
       title,
       description,
-      createdBy: req.user._id,
-      status: 'pending'
+      status: 'pending',
+      createdBy: req.user._id
     });
 
-    const savedProject = await project.save();
-    const populatedProject = await Project.findById(savedProject._id)
-      .populate('createdBy', 'name email');
+    // Populate the created project
+    const populatedProject = await Project.findById(project._id)
+      .populate('createdBy', 'name email')
+      .populate('assignedTo', 'name email');
 
     res.status(201).json(populatedProject);
   } catch (error) {
     console.error('Create project error:', error);
-    res.status(500).json({ message: 'Failed to create project' });
+    res.status(500).json({ 
+      message: 'Failed to create project',
+      error: error.message 
+    });
   }
 };
 
@@ -130,15 +137,13 @@ const getProjectSummary = async (req, res) => {
 const deleteProject = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
-    
     if (!project) {
       return res.status(404).json({ message: 'Project not found' });
     }
 
-    await Project.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Project deleted successfully' });
+    await project.deleteOne();
+    res.status(200).json({ message: 'Project removed' });
   } catch (error) {
-    console.error('Delete project error:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -148,25 +153,31 @@ const deleteProject = async (req, res) => {
 // @access  Private
 const getUserProjects = async (req, res) => {
   try {
-    if (!req.user || !req.user._id) {
+    const userId = req.user._id;
+    if (!userId) {
       return res.status(401).json({ message: 'User not authenticated' });
     }
 
     const projects = await Project.find({
       $or: [
-        { assignedTo: req.user._id },
+        { assignedTo: userId },
         { status: 'pending' }
       ]
     })
     .populate('createdBy', 'name email')
     .populate('assignedTo', 'name email')
+    .populate('acceptedBy', 'name email')
+    .populate('completedBy', 'name email')
     .sort('-createdAt');
 
     const stats = {
       total: projects.length,
       pending: projects.filter(p => p.status === 'pending').length,
+      assigned: projects.filter(p => p.status === 'assigned').length,
       inProgress: projects.filter(p => p.status === 'in-progress').length,
-      completed: projects.filter(p => p.status === 'completed').length
+      completed: projects.filter(p => p.status === 'completed').length,
+      averageProgress: projects.length ? 
+        Math.round(projects.reduce((acc, curr) => acc + (curr.progress || 0), 0) / projects.length) : 0
     };
 
     res.status(200).json({
@@ -175,7 +186,7 @@ const getUserProjects = async (req, res) => {
     });
   } catch (error) {
     console.error('Get user projects error:', error);
-    res.status(500).json({ message: 'Failed to fetch projects' });
+    res.status(500).json({ message: error.message });
   }
 };
 
