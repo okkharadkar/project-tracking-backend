@@ -66,26 +66,28 @@ const updateProject = async (req, res) => {
       return res.status(404).json({ message: 'Project not found' });
     }
 
-    // Only assigned user can update progress
-    if (project.assignedTo?.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Not authorized to update this project' });
-    }
-
     if (progress !== undefined) {
       project.progress = progress;
+      
+      // Update candidate progress
+      if (project.assignedTo) {
+        const candidate = await Candidate.findById(project.assignedTo);
+        if (candidate) {
+          const progressIndex = candidate.progress.findIndex(
+            p => p.project.toString() === project._id.toString()
+          );
+          
+          if (progressIndex !== -1) {
+            candidate.progress[progressIndex].score = Math.floor(progress / 10);
+            await candidate.calculateScores();
+          }
+        }
+      }
     }
 
     await project.save();
-
-    const updatedProject = await Project.findById(project._id)
-      .populate('createdBy', 'name email')
-      .populate('assignedTo', 'name email')
-      .populate('acceptedBy', 'name email')
-      .populate('completedBy', 'name email');
-
-    res.json(updatedProject);
+    res.json(project);
   } catch (error) {
-    console.error('Update project error:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -155,43 +157,45 @@ const deleteProject = async (req, res) => {
 };
 
 // @desc    Get user's projects
-// @route   GET /api/projects/user/:candidateId
+// @route   GET /api/projects/user
 // @access  Private
 const getUserProjects = async (req, res) => {
   try {
-    const userId = req.user._id;
-    if (!userId) {
-      return res.status(401).json({ message: 'User not authenticated' });
-    }
-
+    // Fetch both assigned projects and available (pending) projects
     const projects = await Project.find({
       $or: [
-        { assignedTo: userId },
-        { status: 'pending' }
+        { assignedTo: req.user._id },  // Projects assigned to user
+        { status: 'pending' }          // Available projects
       ]
     })
     .populate('createdBy', 'name email')
     .populate('assignedTo', 'name email')
-    .populate('acceptedBy', 'name email')
-    .populate('completedBy', 'name email')
-    .sort('-createdAt');
+    .sort('-createdAt');  // Show newest first
 
+    // Calculate stats only for user's assigned projects
+    const userProjects = projects.filter(p => p.assignedTo?._id?.toString() === req.user._id.toString());
+    const completedProjects = userProjects.filter(p => p.status === 'completed');
+    const inProgressProjects = userProjects.filter(p => p.status === 'in-progress');
+    
     const stats = {
-      total: projects.length,
+      total: userProjects.length,
       pending: projects.filter(p => p.status === 'pending').length,
-      assigned: projects.filter(p => p.status === 'assigned').length,
-      inProgress: projects.filter(p => p.status === 'in-progress').length,
-      completed: projects.filter(p => p.status === 'completed').length,
-      averageProgress: projects.length ? 
-        Math.round(projects.reduce((acc, curr) => acc + (curr.progress || 0), 0) / projects.length) : 0
+      inProgress: inProgressProjects.length,
+      completed: completedProjects.length,
+      averageProgress: Math.round(
+        userProjects.reduce((acc, curr) => acc + (curr.progress || 0), 0) / Math.max(userProjects.length, 1)
+      ),
+      totalScore: completedProjects.length * 10,
+      completionRate: Math.round((completedProjects.length / Math.max(userProjects.length, 1)) * 100)
     };
 
-    res.status(200).json({
+    res.json({ 
       projects,
-      stats
+      stats,
+      availableProjects: projects.filter(p => p.status === 'pending'),
+      myProjects: userProjects
     });
   } catch (error) {
-    console.error('Get user projects error:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -241,10 +245,6 @@ const completeProject = async (req, res) => {
       return res.status(404).json({ message: 'Project not found' });
     }
 
-    if (project.status !== 'in-progress') {
-      return res.status(400).json({ message: 'Project is not in progress' });
-    }
-
     project.status = 'completed';
     project.completedBy = req.user._id;
     project.completedAt = new Date();
@@ -252,11 +252,16 @@ const completeProject = async (req, res) => {
     
     await project.save();
 
+    // Update candidate score
+    const candidate = await Candidate.findOne({ user: req.user._id });
+    if (candidate) {
+      candidate.totalScore += 10; // Add 10 points for completion
+      await candidate.save();
+    }
+
     const updatedProject = await Project.findById(project._id)
       .populate('createdBy', 'name email')
-      .populate('assignedTo', 'name email')
-      .populate('acceptedBy', 'name email')
-      .populate('completedBy', 'name email');
+      .populate('assignedTo', 'name email');
 
     res.json(updatedProject);
   } catch (error) {

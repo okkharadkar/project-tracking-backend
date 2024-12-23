@@ -105,13 +105,20 @@ const login = async (req, res) => {
   }
 };
 
-// @desc    Get user data
+// @desc    Get current user
 // @route   GET /api/auth/user
 // @access  Private
 const getUser = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('-password');
-    res.json(user);
+    const user = await User.findById(req.user._id)
+      .select('-password')
+      .populate('candidateId');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json({ user });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
